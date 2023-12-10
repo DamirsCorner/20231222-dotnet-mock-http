@@ -1,31 +1,19 @@
 using FluentAssertions;
 using Moq;
-using Moq.Protected;
-using System.Net;
-using System.Net.Http.Json;
+using Moq.Contrib.HttpClient;
 
 namespace MockHttpClient;
 
 public class Tests
 {
-    private HttpClient CreateMockedHttpClientWithResponse(IEnumerable<int> topStories)
-    {
-        var handlerMock = new Mock<HttpMessageHandler>();
-        handlerMock
-            .Protected()
-            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage()
-            {
-                StatusCode = HttpStatusCode.OK,
-                Content = JsonContent.Create(topStories),
-            });
-        return new HttpClient(handlerMock.Object);
-    }
-
     [Test]
     public async Task TypedClientReturnsMockedResponse()
     {
-        var httpClient = CreateMockedHttpClientWithResponse([1, 2, 3]);
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.SetupRequest(HttpMethod.Get, "https://hacker-news.firebaseio.com/v0/topstories.json")
+            .ReturnsJsonResponse(new[] { 1, 2, 3 });
+
+        var httpClient = handlerMock.CreateClient();
 
         var hackerNews = new HackerNewsTypedClient(httpClient);
         var topStories = await hackerNews.GetTopStoriesAsync();
@@ -36,11 +24,12 @@ public class Tests
     [Test]
     public async Task BasicUsageReturnsMockedResponse()
     {
-        var httpClient = CreateMockedHttpClientWithResponse([1, 2, 3]);
-        var httpClientFactoryMock = new Mock<IHttpClientFactory>();
-        httpClientFactoryMock.Setup(x => x.CreateClient(It.IsAny<string>())).Returns(httpClient);
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.SetupRequest(HttpMethod.Get, "https://hacker-news.firebaseio.com/v0/topstories.json")
+            .ReturnsJsonResponse(new[] { 1, 2, 3 });
+        var httpClientFactory = handlerMock.CreateClientFactory();
 
-        var hackerNews = new HackerNewsBasicUsage(httpClientFactoryMock.Object);
+        var hackerNews = new HackerNewsBasicUsage(httpClientFactory);
         var topStories = await hackerNews.GetTopStoriesAsync();
 
         topStories.Should().BeEquivalentTo([1, 2, 3]);
